@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 # ----------------------------
 # Model layers
 # ----------------------------
@@ -10,8 +11,12 @@ class RMSNorm(nn.Module):
         super().__init__()
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(d_model))
+
     def forward(self, x):
-        return self.weight * (x * torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps))
+        return self.weight * (
+            x * torch.rsqrt(torch.mean(x**2, dim=-1, keepdim=True) + self.eps)
+        )
+
 
 class SwiGLUMuchPelu(nn.Module):
     def __init__(self, d_model, d_ff, dropout=0.1):
@@ -20,41 +25,61 @@ class SwiGLUMuchPelu(nn.Module):
         self.w2 = nn.Linear(d_model, d_ff, bias=False)
         self.w3 = nn.Linear(d_ff, d_model, bias=False)
         self.dropout = nn.Dropout(dropout)
+
     def forward(self, x):
         activated = F.silu(self.w1(x)) * self.w2(x)
         return self.dropout(self.w3(activated))
+
 
 class HRMBlock(nn.Module):
     def __init__(self, d_model, n_heads, d_ff, dropout=0.1):
         super().__init__()
         self.norm1 = RMSNorm(d_model)
-        self.attn = nn.MultiheadAttention(d_model, n_heads, dropout=dropout, batch_first=True)
+        self.attn = nn.MultiheadAttention(
+            d_model, n_heads, dropout=dropout, batch_first=True
+        )
         self.norm2 = RMSNorm(d_model)
         self.mlp = SwiGLUMuchPelu(d_model, d_ff, dropout)
         self.dropout = nn.Dropout(dropout)
+
     def forward(self, x, attn_mask=None, key_padding_mask=None):
         x_norm = self.norm1(x)
-        attn_out, _ = self.attn(x_norm, x_norm, x_norm,
-                                attn_mask=attn_mask,
-                                key_padding_mask=key_padding_mask,
-                                need_weights=False)
+        attn_out, _ = self.attn(
+            x_norm,
+            x_norm,
+            x_norm,
+            attn_mask=attn_mask,
+            key_padding_mask=key_padding_mask,
+            need_weights=False,
+        )
         x = x + self.dropout(attn_out)
         x = x + self.dropout(self.mlp(self.norm2(x)))
         return x
+
 
 class HRMInner(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.token_embeddings = nn.Embedding(config["vocab_size"], config["d_model"])
         self.dropout = nn.Dropout(config["dropout"])
-        self.H_module = HRMBlock(config["d_model"], config["n_heads"], config["d_ff"], config["dropout"])
-        self.L_module = HRMBlock(config["d_model"], config["n_heads"], config["d_ff"], config["dropout"])
+        self.H_module = HRMBlock(
+            config["d_model"], config["n_heads"], config["d_ff"], config["dropout"]
+        )
+        self.L_module = HRMBlock(
+            config["d_model"], config["n_heads"], config["d_ff"], config["dropout"]
+        )
+
     def forward(self, z_H, z_L, attn_mask=None, key_padding_mask=None):
         z_L_input = z_L + z_H
-        z_L_new = self.L_module(z_L_input, attn_mask=attn_mask, key_padding_mask=key_padding_mask)
+        z_L_new = self.L_module(
+            z_L_input, attn_mask=attn_mask, key_padding_mask=key_padding_mask
+        )
         z_H_input = z_H + z_L_new
-        z_H_new = self.H_module(z_H_input, attn_mask=attn_mask, key_padding_mask=key_padding_mask)
+        z_H_new = self.H_module(
+            z_H_input, attn_mask=attn_mask, key_padding_mask=key_padding_mask
+        )
         return z_H_new, z_L_new
+
 
 class HierarchicalReasoningModel_ACTV1(nn.Module):
     def __init__(self, config):
@@ -74,20 +99,24 @@ class HierarchicalReasoningModel_ACTV1(nn.Module):
 
         key_padding_mask = None
         if attention_mask is not None:
-            key_padding_mask = (attention_mask == 0)
+            key_padding_mask = attention_mask == 0
 
         mask_val = -1e4
         causal = torch.zeros((seq_len, seq_len), device=device)
-        causal = causal.masked_fill(torch.triu(torch.ones_like(causal), diagonal=1).bool(), mask_val)
+        causal = causal.masked_fill(
+            torch.triu(torch.ones_like(causal), diagonal=1).bool(), mask_val
+        )
 
-        halting_probs = torch.zeros((batch_size, seq_len, self.max_steps), device=device)
+        halting_probs = torch.zeros(
+            (batch_size, seq_len, self.max_steps), device=device
+        )
         remainders = torch.ones((batch_size, seq_len), device=device)
         total_z_H = 0.1 * z_L.clone()
 
         eps = 1e-6
         for step in range(self.max_steps):
             p_halt = self.halt_head(z_H).squeeze(-1).clamp(eps, 1 - eps)
-            is_last = (step == self.max_steps - 1)
+            is_last = step == self.max_steps - 1
             halt_now_prob = torch.ones_like(p_halt) if is_last else p_halt
             contrib = (remainders * halt_now_prob).clamp(min=0.0, max=1.0)
             halting_probs[:, :, step] = contrib
@@ -95,7 +124,9 @@ class HierarchicalReasoningModel_ACTV1(nn.Module):
             remainders = (remainders * (1 - p_halt)).clamp(min=eps, max=1.0)
             if torch.all(remainders < 1e-4):
                 break
-            z_H, z_L = self.inner_model(z_H, z_L, attn_mask=causal, key_padding_mask=key_padding_mask)
+            z_H, z_L = self.inner_model(
+                z_H, z_L, attn_mask=causal, key_padding_mask=key_padding_mask
+            )
 
         logits = self.lm_head(total_z_H)
         loss = ponder_loss = None
@@ -103,7 +134,9 @@ class HierarchicalReasoningModel_ACTV1(nn.Module):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             loss_fct = nn.CrossEntropyLoss()
-            lm_loss = loss_fct(shift_logits.view(-1, self.config["vocab_size"]), shift_labels.view(-1))
+            lm_loss = loss_fct(
+                shift_logits.view(-1, self.config["vocab_size"]), shift_labels.view(-1)
+            )
             ponder_loss = torch.mean(torch.sum(halting_probs, dim=-1))
             loss = lm_loss + self.ponder_loss_weight * ponder_loss
         return {"loss": loss, "logits": logits, "ponder_loss": ponder_loss}

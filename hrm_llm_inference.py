@@ -18,11 +18,16 @@ MODEL_CONFIG = {"d_model": 512, "n_heads": 8, "d_ff": 2048, "dropout": 0.1}
 BLOCK_SIZE = 512
 MAX_HALT_STEPS = 8
 
-def generate_text(model, tokenizer, prompt_text, max_new_tokens=15, temperature=0.7, top_k=50):
+
+def generate_text(
+    model, tokenizer, prompt_text, max_new_tokens=15, temperature=0.7, top_k=50
+):
     """Generates text using the HRMText1 model."""
     model.eval()
     device = next(model.parameters()).device
-    input_ids = tokenizer.encode(prompt_text, return_tensors="pt", add_special_tokens=False).to(device)
+    input_ids = tokenizer.encode(
+        prompt_text, return_tensors="pt", add_special_tokens=False
+    ).to(device)
     attention_mask = torch.ones_like(input_ids, dtype=torch.long, device=device)
 
     generated_ids = []
@@ -41,7 +46,9 @@ def generate_text(model, tokenizer, prompt_text, max_new_tokens=15, temperature=
 
             # Top-K filtering
             if top_k > 0:
-                topk_vals, topk_idx = torch.topk(next_token_logits, k=min(top_k, next_token_logits.size(-1)))
+                topk_vals, topk_idx = torch.topk(
+                    next_token_logits, k=min(top_k, next_token_logits.size(-1))
+                )
                 mask = torch.full_like(next_token_logits, float("-inf"))
                 mask.scatter_(1, topk_idx, topk_vals)
                 next_token_logits = mask
@@ -50,42 +57,48 @@ def generate_text(model, tokenizer, prompt_text, max_new_tokens=15, temperature=
             next_token_id = torch.multinomial(probs, num_samples=1)
 
             # Stop if EOS token is generated
-            if tokenizer.eos_token_id is not None and next_token_id.item() == tokenizer.eos_token_id:
+            if (
+                tokenizer.eos_token_id is not None
+                and next_token_id.item() == tokenizer.eos_token_id
+            ):
                 break
 
             # Append the new token for the next generation step
             input_ids = torch.cat([input_ids, next_token_id], dim=1)
-            attention_mask = torch.cat([attention_mask, torch.ones((1, 1), device=device, dtype=torch.long)], dim=1)
+            attention_mask = torch.cat(
+                [attention_mask, torch.ones((1, 1), device=device, dtype=torch.long)],
+                dim=1,
+            )
             generated_ids.append(next_token_id.item())
 
     return tokenizer.decode(input_ids[0], skip_special_tokens=True)
 
+
 def main():
     """Main function to run the inference script."""
-    parser = argparse.ArgumentParser(description="Run inference with a trained HRM-Text1 model.")
+    parser = argparse.ArgumentParser(
+        description="Run inference with a trained HRM-Text1 model."
+    )
     parser.add_argument(
         "--model_path",
         type=str,
         required=True,
-        help="Path to the trained model weights file (e.g., pytorch_model.bin)."
+        help="Path to the trained model weights file (e.g., pytorch_model.bin).",
     )
     parser.add_argument(
         "--max_new_tokens",
         type=int,
         default=15,
-        help="Maximum number of new tokens to generate (default: 15)."
+        help="Maximum number of new tokens to generate (default: 15).",
     )
     parser.add_argument(
         "--temperature",
         type=float,
         default=0.7,
-        help="Temperature for sampling (default: 0.7)."
+        help="Temperature for sampling (default: 0.7).",
     )
     parser.add_argument(
-        "--top_k",
-        type=int,
-        default=50,
-        help="Top-k value for filtering (default: 50)."
+        "--top_k", type=int, default=50, help="Top-k value for filtering (default: 50)."
     )
     args = parser.parse_args()
 
@@ -95,7 +108,9 @@ def main():
     print(f"Using device: {device}")
 
     print(f"Loading tokenizer '{T5_TOKENIZER_REPO}'...")
-    tokenizer = T5Tokenizer.from_pretrained(T5_TOKENIZER_REPO, use_fast=False, trust_remote_code=True)
+    tokenizer = T5Tokenizer.from_pretrained(
+        T5_TOKENIZER_REPO, use_fast=False, trust_remote_code=True
+    )
     if tokenizer.pad_token is None:
         tokenizer.add_special_tokens({"pad_token": "<pad>"})
     tokenizer.padding_side = "left"
@@ -110,7 +125,7 @@ def main():
         "dropout": MODEL_CONFIG["dropout"],
         "halt_max_steps": MAX_HALT_STEPS,
         "ponder_loss_weight": 0.0,
-        "halt_bias_init": 0.0
+        "halt_bias_init": 0.0,
     }
     # model = HRMText1(config).to(device)
     model = HierarchicalReasoningModel_ACTV1(config).to(device)
@@ -131,7 +146,14 @@ def main():
         prompt = input("Enter your prompt: ")
         print("\nGenerating...")
 
-        generated_text = generate_text(model, tokenizer, prompt, max_new_tokens=args.max_new_tokens, temperature=args.temperature, top_k=args.top_k)
+        generated_text = generate_text(
+            model,
+            tokenizer,
+            prompt,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            top_k=args.top_k,
+        )
 
         print("\n--- Generated Text ---")
         print(generated_text)
@@ -141,6 +163,7 @@ def main():
         print("\nExiting.")
     except Exception as e:
         print(f"\nAn error occurred during generation: {e}")
+
 
 if __name__ == "__main__":
     main()
