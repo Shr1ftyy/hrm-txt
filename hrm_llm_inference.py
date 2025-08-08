@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from transformers import T5Tokenizer
 
 from hrm_text1_modeling import HRMText1
+from hrm_sofitesfay import HierarchicalReasoningModel_ACTV1
 
 # Model Config (Make sure these are the same as the training if you tweaked those params)
 T5_TOKENIZER_REPO = "t5-small"
@@ -89,6 +90,8 @@ def main():
     args = parser.parse_args()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
     print(f"Using device: {device}")
 
     print(f"Loading tokenizer '{T5_TOKENIZER_REPO}'...")
@@ -109,7 +112,8 @@ def main():
         "ponder_loss_weight": 0.0,
         "halt_bias_init": 0.0
     }
-    model = HRMText1(config).to(device)
+    # model = HRMText1(config).to(device)
+    model = HierarchicalReasoningModel_ACTV1(config).to(device)
 
     print(f"Loading model weights from '{args.model_path}'...")
     try:

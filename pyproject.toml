@@ -1,0 +1,15 @@
+[project]
+name = "hrm-txt"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "argparse>=1.4.0",
+    "datasets>=4.0.0",
+    "sentencepiece>=0.2.0",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+    "transformers>=4.55.0",
+    "wandb>=0.21.1",
+]

@@ -1,7 +1,7 @@
 """
-HRM-Text1 Training Script
+HRM-Text1 Training Script - based on https://github.com/qingy1337/HRM-Text
 
-Inspiration taken from [SofiTesfay2010's script](https://colab.research.google.com/drive/1xZNYC-yhwdJxzbpwRekE_rDjTki5CvEv?usp=sharing)
+who took inspiration from [SofiTesfay2010's script](https://colab.research.google.com/drive/1xZNYC-yhwdJxzbpwRekE_rDjTki5CvEv?usp=sharing)
 """
 
 import os, shutil, pathlib, random, json, datetime, math
@@ -65,6 +65,8 @@ def set_seed(seed: int):
 
 set_seed(SEED)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if torch.backends.mps.is_available():
+    device = torch.device("mps")
 print(f"Using device: {device}")
 
 # HuggingFace & W&B Authentication
