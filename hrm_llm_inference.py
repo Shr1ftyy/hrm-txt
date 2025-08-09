@@ -10,7 +10,6 @@ import torch.nn.functional as F
 from transformers import T5Tokenizer
 
 from hrm_text1_modeling import HRMText1
-from hrm_sofitesfay import HierarchicalReasoningModel_ACTV1
 
 # Model Config (Make sure these are the same as the training if you tweaked those params)
 T5_TOKENIZER_REPO = "t5-small"
@@ -108,6 +107,7 @@ def main():
     print(f"Using device: {device}")
 
     print(f"Loading tokenizer '{T5_TOKENIZER_REPO}'...")
+    # NOTE: this tokenizor will have to be swapped out for the one that we use during training
     tokenizer = T5Tokenizer.from_pretrained(
         T5_TOKENIZER_REPO, use_fast=False, trust_remote_code=True
     )
@@ -127,8 +127,7 @@ def main():
         "ponder_loss_weight": 0.0,
         "halt_bias_init": 0.0,
     }
-    # model = HRMText1(config).to(device)
-    model = HierarchicalReasoningModel_ACTV1(config).to(device)
+    model = HRMText1(config).to(device)
 
     print(f"Loading model weights from '{args.model_path}'...")
     try:
